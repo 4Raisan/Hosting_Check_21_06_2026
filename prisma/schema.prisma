@@ -1,0 +1,128 @@
+// Prisma schema for carwash-marketplace
+// Note: the no-overlap exclusion constraint on Booking is added via a raw SQL
+// migration (see prisma/migrations/.../no_overlap.sql) because Prisma doesn't
+// model GiST EXCLUDE constraints natively.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  WASHER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  name         String
+  phone        String?
+  createdAt    DateTime @default(now())
+
+  washerProfile      WasherProfile?
+  bookingsAsCustomer Booking[]      @relation("CustomerBookings")
+}
+
+model WasherProfile {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio             String?
+  baseRateCents   Int     @default(2500)
+  serviceAreaKm   Int     @default(10)
+  stripeAccountId String?
+  ratingAvg       Float   @default(0)
+  ratingCount     Int     @default(0)
+  latitude        Float?
+  longitude       Float?
+
+  services     Service[]
+  availability Availability[]
+  bookings     Booking[]
+}
+
+model Service {
+  id          String        @id @default(cuid())
+  washerId    String
+  washer      WasherProfile @relation(fields: [washerId], references: [id], onDelete: Cascade)
+  name        String
+  durationMin Int
+  priceCents  Int
+  active      Boolean       @default(true)
+
+  bookings Booking[]
+
+  @@index([washerId])
+}
+
+model Availability {
+  id        String        @id @default(cuid())
+  washerId  String
+  washer    WasherProfile @relation(fields: [washerId], references: [id], onDelete: Cascade)
+  dayOfWeek Int // 0 = Sunday ... 6 = Saturday
+  startTime String // "HH:MM" 24h
+  endTime   String // "HH:MM" 24h
+
+  @@index([washerId, dayOfWeek])
+}
+
+model Booking {
+  id                    String        @id @default(cuid())
+  customerId            String
+  customer              User          @relation("CustomerBookings", fields: [customerId], references: [id])
+  washerId              String
+  washer                WasherProfile @relation(fields: [washerId], references: [id])
+  serviceId             String
+  service               Service       @relation(fields: [serviceId], references: [id])
+  startsAt              DateTime
+  endsAt                DateTime
+  status                BookingStatus @default(PENDING)
+  addressLine           String
+  latitude              Float?
+  longitude             Float?
+  priceCents            Int
+  platformFeeCents      Int
+  stripePaymentIntentId String?
+  createdAt             DateTime      @default(now())
+
+  review Review?
+
+  @@index([customerId])
+  @@index([washerId, startsAt])
+}
+
+model Review {
+  id                String   @id @default(cuid())
+  bookingId         String   @unique
+  booking           Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  rating            Int
+  comment           String?
+  createdByCustomer Boolean  @default(true)
+  createdAt         DateTime @default(now())
+}
+
+model IdempotencyKey {
+  key       String   @id
+  userId    String
+  resource  String // e.g. "booking"
+  resultId  String? // id of the created resource (so retries return the same one)
+  createdAt DateTime @default(now())
+
+  @@index([userId, resource])
+}

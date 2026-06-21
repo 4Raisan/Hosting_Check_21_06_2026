@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+build
+dist
+
+.env
+.env.local
+.env.*.local
+
+*.log
+.DS_Store
+Thumbs.db
+
+.vscode
+.idea
+
+# Prisma generated client (regenerable)
+src/generated
