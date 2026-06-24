@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { Plus, Trash2, EyeOff, Eye, Wallet, Sparkles, Clock } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCents } from "@/lib/utils";
-import { revalidatePath } from "next/cache";
 import { stripeMocked } from "@/lib/stripe";
+import Reveal from "@/components/Reveal";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +14,12 @@ export default async function WasherDashboard() {
   if (!session?.user) redirect("/auth/signin?callbackUrl=/dashboard/washer");
   if (session.user.role !== "WASHER") {
     return (
-      <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-        This dashboard is for washers. <a href="/dashboard/customer" className="underline">Go to your customer dashboard</a>.
+      <div className="card border border-amber-400/30 bg-amber-500/10 text-sm text-amber-200">
+        This dashboard is for washers.{" "}
+        <a href="/dashboard/customer" className="text-cyan-300 underline">
+          Go to your customer dashboard
+        </a>
+        .
       </div>
     );
   }
@@ -31,168 +37,278 @@ export default async function WasherDashboard() {
     },
   });
   if (!profile) {
-    return <div className="p-8">Profile missing. Contact support.</div>;
+    return <div className="card">Profile missing. Contact support.</div>;
   }
+
+  // Earnings stats
+  const completed = profile.bookings.filter((b) => b.status === "COMPLETED" || b.status === "CONFIRMED");
+  const totalEarned = completed.reduce((sum, b) => sum + (b.priceCents - b.platformFeeCents), 0);
+  const upcomingCount = profile.bookings.filter(
+    (b) => b.startsAt >= new Date() && b.status !== "CANCELLED",
+  ).length;
 
   return (
     <div className="space-y-10">
-      <h1 className="text-2xl font-bold">Washer dashboard</h1>
-
-      {/* Stripe Connect status */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-lg font-semibold">Payouts</h2>
-        {profile.stripeAccountId ? (
-          <p className="mt-1 text-sm text-green-700">
-            Stripe Connect linked ({profile.stripeAccountId}).
-          </p>
-        ) : (
-          <>
-            <p className="mt-1 text-sm text-slate-600">
-              You need to link a Stripe account to receive payouts.
-              {stripeMocked && <span className="ml-1 text-amber-700">(Stripe is in mock mode — this just sets a fake ID.)</span>}
+      <Reveal>
+        <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
+              Washer <span className="neon-text">command center</span>
+            </h1>
+            <p className="mt-1 text-slate-400">
+              Hey {session.user.name?.split(" ")[0] ?? "there"} — let's get you booked.
             </p>
-            <form
-              action={async () => {
-                "use server";
-                // Stub: in production, redirect to Stripe Connect onboarding URL.
-                await prisma.washerProfile.update({
-                  where: { id: profile.id },
-                  data: { stripeAccountId: `acct_mock_${profile.id.slice(0, 8)}` },
-                });
-                revalidatePath("/dashboard/washer");
-              }}
-              className="mt-3"
-            >
-              <button className="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
-                Link Stripe account
-              </button>
-            </form>
-          </>
-        )}
-      </section>
+          </div>
+        </header>
+      </Reveal>
 
-      {/* Services CRUD */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-lg font-semibold">Services</h2>
-        <ul className="mt-3 divide-y divide-slate-100">
-          {profile.services.map((s) => (
-            <li key={s.id} className="flex items-center justify-between py-3">
-              <div>
-                <div className="font-medium">{s.name} {!s.active && <span className="ml-2 text-xs text-slate-500">(hidden)</span>}</div>
-                <div className="text-sm text-slate-500">{s.durationMin} min · {formatCents(s.priceCents)}</div>
-              </div>
-              <form
-                action={async () => {
-                  "use server";
-                  await prisma.service.update({
-                    where: { id: s.id },
-                    data: { active: !s.active },
-                  });
-                  revalidatePath("/dashboard/washer");
-                }}
-              >
-                <button className="text-sm text-brand-600 hover:underline">
-                  {s.active ? "Hide" : "Activate"}
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-        <form
-          action={async (fd) => {
-            "use server";
-            const name = String(fd.get("name") ?? "");
-            const durationMin = Number(fd.get("durationMin") ?? 30);
-            const priceCents = Math.round(Number(fd.get("priceDollars") ?? 0) * 100);
-            if (!name || !priceCents) return;
-            await prisma.service.create({
-              data: { washerId: profile.id, name, durationMin, priceCents },
-            });
-            revalidatePath("/dashboard/washer");
-          }}
-          className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4"
-        >
-          <input name="name" placeholder="Service name" className="rounded border border-slate-300 px-3 py-2" required />
-          <input name="durationMin" type="number" defaultValue={60} className="rounded border border-slate-300 px-3 py-2" />
-          <input name="priceDollars" type="number" step="0.01" placeholder="Price ($)" className="rounded border border-slate-300 px-3 py-2" required />
-          <button className="rounded bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            Add service
-          </button>
-        </form>
-      </section>
+      {/* ----- Stats strip ----- */}
+      <Reveal>
+        <div className="neon-border rounded-2xl">
+          <div className="grid grid-cols-2 divide-white/10 sm:grid-cols-3 sm:divide-x">
+            <Stat label="Lifetime earnings" value={formatCents(totalEarned)} />
+            <Stat label="Upcoming bookings" value={String(upcomingCount)} />
+            <Stat label="Rating" value={`${profile.ratingAvg.toFixed(1)}★`} sub={`${profile.ratingCount} reviews`} />
+          </div>
+        </div>
+      </Reveal>
 
-      {/* Availability */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-lg font-semibold">Weekly availability</h2>
-        <p className="text-xs text-slate-500">One row per day, recurring every week.</p>
-        <ul className="mt-3 divide-y divide-slate-100">
-          {profile.availability.map((a) => (
-            <li key={a.id} className="flex items-center justify-between py-2 text-sm">
-              <span>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][a.dayOfWeek]}</span>
-              <span className="text-slate-500">{a.startTime} – {a.endTime}</span>
-              <form
-                action={async () => {
-                  "use server";
-                  await prisma.availability.delete({ where: { id: a.id } });
-                  revalidatePath("/dashboard/washer");
-                }}
-              >
-                <button className="text-xs text-red-600 hover:underline">Remove</button>
-              </form>
-            </li>
-          ))}
-        </ul>
-        <form
-          action={async (fd) => {
-            "use server";
-            const dow = Number(fd.get("dow"));
-            const startTime = String(fd.get("startTime") ?? "");
-            const endTime = String(fd.get("endTime") ?? "");
-            if (!startTime || !endTime) return;
-            await prisma.availability.create({
-              data: { washerId: profile.id, dayOfWeek: dow, startTime, endTime },
-            });
-            revalidatePath("/dashboard/washer");
-          }}
-          className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4"
-        >
-          <select name="dow" className="rounded border border-slate-300 px-3 py-2">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((n, i) => (
-              <option key={i} value={i}>{n}</option>
-            ))}
-          </select>
-          <input name="startTime" type="time" defaultValue="09:00" className="rounded border border-slate-300 px-3 py-2" />
-          <input name="endTime" type="time" defaultValue="18:00" className="rounded border border-slate-300 px-3 py-2" />
-          <button className="rounded bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            Add slot
-          </button>
-        </form>
-      </section>
+      {/* ----- Stripe Connect ----- */}
+      <Reveal delay={0.05}>
+        <section className="card">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#22d3ee,#8b5cf6)] text-white shadow-glow">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-display text-lg font-semibold">Payouts</h2>
+              {profile.stripeAccountId ? (
+                <p className="mt-1 text-sm text-emerald-300">
+                  Stripe Connect linked ·{" "}
+                  <span className="font-mono text-xs text-emerald-200/80">
+                    {profile.stripeAccountId}
+                  </span>
+                </p>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Link a Stripe account to receive payouts.
+                    {stripeMocked && (
+                      <span className="ml-1 text-amber-300">
+                        (Stripe is in mock mode — this just sets a fake ID.)
+                      </span>
+                    )}
+                  </p>
+                  <form
+                    action={async () => {
+                      "use server";
+                      await prisma.washerProfile.update({
+                        where: { id: profile.id },
+                        data: { stripeAccountId: `acct_mock_${profile.id.slice(0, 8)}` },
+                      });
+                      revalidatePath("/dashboard/washer");
+                    }}
+                    className="mt-3"
+                  >
+                    <button className="btn-primary text-sm">
+                      <Sparkles className="h-4 w-4" />
+                      Link Stripe account
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      </Reveal>
 
-      {/* Bookings */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-lg font-semibold">Recent bookings</h2>
-        {profile.bookings.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No bookings yet.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-slate-100">
-            {profile.bookings.map((b) => (
-              <li key={b.id} className="py-3">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-medium">{b.service.name}</span>
-                  <span className="text-xs uppercase tracking-wide text-slate-500">{b.status}</span>
+      {/* ----- Services CRUD ----- */}
+      <Reveal delay={0.1}>
+        <section className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold">Services</h2>
+            <span className="text-xs text-slate-500">{profile.services.length} total</span>
+          </div>
+
+          <ul className="mt-4 divide-y divide-white/5">
+            {profile.services.map((s) => (
+              <li key={s.id} className="flex items-center justify-between py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 font-medium">
+                    {s.name}
+                    {!s.active && (
+                      <span className="rounded-full border border-slate-400/30 bg-slate-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-300">
+                        Hidden
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-slate-400">
+                    <Clock className="h-3 w-3" /> {s.durationMin} min · {formatCents(s.priceCents)}
+                  </div>
                 </div>
-                <div className="text-sm text-slate-600">
-                  {b.customer.name} · {b.startsAt.toLocaleString()}
-                </div>
-                <div className="text-sm text-slate-500">
-                  Earns {formatCents(b.priceCents - b.platformFeeCents)} (after {formatCents(b.platformFeeCents)} platform fee)
-                </div>
+                <form
+                  action={async () => {
+                    "use server";
+                    await prisma.service.update({
+                      where: { id: s.id },
+                      data: { active: !s.active },
+                    });
+                    revalidatePath("/dashboard/washer");
+                  }}
+                >
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300 hover:bg-white/10 hover:text-white transition"
+                    title={s.active ? "Hide" : "Activate"}
+                  >
+                    {s.active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {s.active ? "Hide" : "Activate"}
+                  </button>
+                </form>
               </li>
             ))}
+            {profile.services.length === 0 && (
+              <li className="py-4 text-sm text-slate-400">No services yet — add one below.</li>
+            )}
           </ul>
-        )}
-      </section>
+
+          <form
+            action={async (fd) => {
+              "use server";
+              const name = String(fd.get("name") ?? "");
+              const durationMin = Number(fd.get("durationMin") ?? 30);
+              const priceCents = Math.round(Number(fd.get("priceDollars") ?? 0) * 100);
+              if (!name || !priceCents) return;
+              await prisma.service.create({
+                data: { washerId: profile.id, name, durationMin, priceCents },
+              });
+              revalidatePath("/dashboard/washer");
+            }}
+            className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-[1fr,7rem,8rem,auto]"
+          >
+            <input name="name" placeholder="Service name" className="input" required />
+            <input
+              name="durationMin"
+              type="number"
+              defaultValue={60}
+              placeholder="Min"
+              className="input"
+            />
+            <input
+              name="priceDollars"
+              type="number"
+              step="0.01"
+              placeholder="Price ($)"
+              className="input"
+              required
+            />
+            <button className="btn-primary text-sm">
+              <Plus className="h-4 w-4" /> Add
+            </button>
+          </form>
+        </section>
+      </Reveal>
+
+      {/* ----- Availability ----- */}
+      <Reveal delay={0.15}>
+        <section className="card">
+          <h2 className="font-display text-lg font-semibold">Weekly availability</h2>
+          <p className="text-xs text-slate-500">Recurring slots, one per row.</p>
+          <ul className="mt-4 divide-y divide-white/5">
+            {profile.availability.map((a) => (
+              <li key={a.id} className="flex items-center justify-between py-2.5 text-sm">
+                <span className="font-medium">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][a.dayOfWeek]}
+                </span>
+                <span className="text-slate-400">
+                  {a.startTime} – {a.endTime}
+                </span>
+                <form
+                  action={async () => {
+                    "use server";
+                    await prisma.availability.delete({ where: { id: a.id } });
+                    revalidatePath("/dashboard/washer");
+                  }}
+                >
+                  <button className="inline-flex items-center gap-1 text-xs text-red-300 hover:text-red-200 transition">
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                  </button>
+                </form>
+              </li>
+            ))}
+            {profile.availability.length === 0 && (
+              <li className="py-3 text-sm text-slate-400">No availability set.</li>
+            )}
+          </ul>
+
+          <form
+            action={async (fd) => {
+              "use server";
+              const dow = Number(fd.get("dow"));
+              const startTime = String(fd.get("startTime") ?? "");
+              const endTime = String(fd.get("endTime") ?? "");
+              if (!startTime || !endTime) return;
+              await prisma.availability.create({
+                data: { washerId: profile.id, dayOfWeek: dow, startTime, endTime },
+              });
+              revalidatePath("/dashboard/washer");
+            }}
+            className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-[1fr,1fr,1fr,auto]"
+          >
+            <select name="dow" className="input">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((n, i) => (
+                <option key={i} value={i} className="bg-ink-900">
+                  {n}
+                </option>
+              ))}
+            </select>
+            <input name="startTime" type="time" defaultValue="09:00" className="input" />
+            <input name="endTime" type="time" defaultValue="18:00" className="input" />
+            <button className="btn-primary text-sm">
+              <Plus className="h-4 w-4" /> Add slot
+            </button>
+          </form>
+        </section>
+      </Reveal>
+
+      {/* ----- Recent bookings ----- */}
+      <Reveal delay={0.2}>
+        <section className="card">
+          <h2 className="font-display text-lg font-semibold">Recent bookings</h2>
+          {profile.bookings.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400">No bookings yet.</p>
+          ) : (
+            <ul className="mt-4 divide-y divide-white/5">
+              {profile.bookings.map((b) => (
+                <li key={b.id} className="py-3.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium">{b.service.name}</span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-300">
+                      {b.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-sm text-slate-300">
+                    {b.customer.name} · {b.startsAt.toLocaleString()}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Earns {formatCents(b.priceCents - b.platformFeeCents)} (after{" "}
+                    {formatCents(b.platformFeeCents)} platform fee)
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </Reveal>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="px-6 py-7 text-center">
+      <div className="font-display text-2xl font-bold neon-text">{value}</div>
+      <div className="mt-1 text-xs uppercase tracking-wider text-slate-400">{label}</div>
+      {sub && <div className="mt-0.5 text-[10px] text-slate-500">{sub}</div>}
     </div>
   );
 }

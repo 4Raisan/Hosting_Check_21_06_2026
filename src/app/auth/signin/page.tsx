@@ -1,57 +1,66 @@
-import { signIn } from "@/auth";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { signIn } from "@/auth";
+import Reveal from "@/components/Reveal";
 
-export default function SignInPage({ searchParams }: { searchParams: { callbackUrl?: string; error?: string } }) {
+export default function SignInPage({
+  searchParams,
+}: {
+  searchParams: { callbackUrl?: string; error?: string };
+}) {
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="text-2xl font-bold">Sign in</h1>
-      <p className="mt-1 text-sm text-slate-600">Welcome back.</p>
+      <Reveal>
+        <div className="neon-border rounded-2xl">
+          <div className="p-7">
+            <h1 className="font-display text-3xl font-bold">Welcome back</h1>
+            <p className="mt-1 text-sm text-slate-400">Sign in to your Sparkle account.</p>
 
-      {searchParams.error && (
-        <div className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-          Invalid email or password.
+            {searchParams.error && (
+              <div className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200 backdrop-blur">
+                Invalid email or password.
+              </div>
+            )}
+
+            <form
+              action={async (formData) => {
+                "use server";
+                await signIn("credentials", {
+                  email: formData.get("email"),
+                  password: formData.get("password"),
+                  redirectTo: searchParams.callbackUrl ?? "/dashboard/customer",
+                });
+              }}
+              className="mt-6 space-y-4"
+            >
+              <Field label="Email" name="email" type="email" required />
+              <Field label="Password" name="password" type="password" required />
+              <button type="submit" className="btn-primary w-full">
+                Sign in <ArrowRight className="h-4 w-4" />
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-sm text-slate-400">
+              No account?{" "}
+              <Link href="/auth/signup" className="text-cyan-400 hover:underline">
+                Sign up
+              </Link>
+            </p>
+          </div>
         </div>
-      )}
-
-      <form
-        action={async (formData) => {
-          "use server";
-          await signIn("credentials", {
-            email: formData.get("email"),
-            password: formData.get("password"),
-            redirectTo: searchParams.callbackUrl ?? "/dashboard/customer",
-          });
-        }}
-        className="mt-6 space-y-4"
-      >
-        <Field label="Email" name="email" type="email" required />
-        <Field label="Password" name="password" type="password" required />
-        <button
-          type="submit"
-          className="w-full rounded bg-brand-600 px-4 py-2 font-semibold text-white hover:bg-brand-700"
-        >
-          Sign in
-        </button>
-      </form>
-
-      <p className="mt-4 text-sm text-slate-600">
-        No account?{" "}
-        <Link href="/auth/signup" className="text-brand-600 hover:underline">
-          Sign up
-        </Link>
-      </p>
+      </Reveal>
     </div>
   );
 }
 
-function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({
+  label,
+  ...props
+}: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <input
-        {...props}
-        className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 focus:border-brand-500 focus:outline-none"
-      />
+      <span className="label">{label}</span>
+      <input {...props} className="input mt-1" />
     </label>
   );
 }

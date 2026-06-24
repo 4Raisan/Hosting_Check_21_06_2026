@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
+import Logo from "@/components/Logo";
+import BackgroundBlobs from "@/components/BackgroundBlobs";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sparkle — Mobile Car Wash Marketplace",
-  description: "Book a mobile car wash on demand. Become a washer and grow your route.",
+  title: "Sparkle — Mobile Car Wash, Reimagined",
+  description: "Book a mobile car wash on demand. A futuristic marketplace for sparkling rides.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,40 +16,49 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-lg font-bold text-brand-600">
-              Sparkle
+        <BackgroundBlobs />
+
+        <header className="sticky top-3 z-30 mx-auto mt-3 w-[min(96%,72rem)]">
+          <div className="glass-strong flex items-center justify-between rounded-full px-5 py-2.5 shadow-glow">
+            <Link href="/" className="hover:opacity-90 transition">
+              <Logo />
             </Link>
-            <nav className="flex items-center gap-4 text-sm">
-              <Link href="/washers" className="hover:text-brand-600">Find a wash</Link>
+            <nav className="flex items-center gap-1 text-sm">
+              <Link
+                href="/washers"
+                className="rounded-full px-3 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white transition"
+              >
+                Find a wash
+              </Link>
               {session?.user ? (
                 <>
                   <Link
                     href={session.user.role === "WASHER" ? "/dashboard/washer" : "/dashboard/customer"}
-                    className="hover:text-brand-600"
+                    className="rounded-full px-3 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white transition"
                   >
                     Dashboard
                   </Link>
-                  <span className="text-slate-500">{session.user.email}</span>
+                  <span className="hidden text-xs text-slate-500 sm:inline">
+                    {session.user.email}
+                  </span>
                   <form
                     action={async () => {
                       "use server";
                       await signOut({ redirectTo: "/" });
                     }}
                   >
-                    <button className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
-                      Sign out
-                    </button>
+                    <button className="btn-ghost ml-2 px-4 py-1.5 text-sm">Sign out</button>
                   </form>
                 </>
               ) : (
                 <>
-                  <Link href="/auth/signin" className="hover:text-brand-600">Sign in</Link>
                   <Link
-                    href="/auth/signup"
-                    className="rounded bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700"
+                    href="/auth/signin"
+                    className="rounded-full px-3 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white transition"
                   >
+                    Sign in
+                  </Link>
+                  <Link href="/auth/signup" className="btn-primary ml-2 px-4 py-1.5 text-sm">
                     Sign up
                   </Link>
                 </>
@@ -55,9 +66,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-        <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-500">
-          Sparkle MVP · Built for demo purposes
+
+        <main className="mx-auto max-w-6xl px-4 py-10 sm:py-14">{children}</main>
+
+        <footer className="mt-20 border-t border-white/5 py-8 text-center text-xs text-slate-500">
+          <div className="mx-auto max-w-6xl px-4">
+            <span className="neon-text font-semibold">Sparkle</span> · Mobile car wash marketplace ·
+            Built with care
+          </div>
         </footer>
       </body>
     </html>
